@@ -5,15 +5,46 @@
 
 #include <cstdint>
 #include <string>
+#include <set>
 
 //! \brief A class that assembles a series of excerpts from a byte stream (possibly out of order,
 //! possibly overlapping) into an in-order byte stream.
 class StreamReassembler {
   private:
     // Your code here -- add private members as necessary.
+    
+    struct Excerpt {
+        size_t beginIdx;
+        size_t endIdx;
+        std::string data;
+        bool operator<(const Excerpt& e) const {
+            return beginIdx < e.beginIdx;
+        }
+
+        bool operator==(const Excerpt& e) const {
+            return beginIdx == e.beginIdx;
+        }
+
+        bool operator>(const Excerpt& e) const {
+            return beginIdx > e.beginIdx;
+        }
+
+        Excerpt(const size_t b, const size_t e, const std::string& d) : beginIdx(b), endIdx(e), data(d) {}
+    };
 
     ByteStream _output;  //!< The reassembled in-order byte stream
     size_t _capacity;    //!< The maximum number of bytes
+    size_t _begin = 0;
+    size_t _end = 0;
+    size_t _unassembled_bytes;
+    bool _eof {false};
+    std::set<Excerpt> _buffer;
+
+    size_t remaining_capacity() const {
+        return _capacity - _output.buffer_size() - (_end - _begin);
+    }
+    std::string check_capacity(const std::string&, size_t);
+    void check_eof();
 
   public:
     //! \brief Construct a `StreamReassembler` that will store up to `capacity` bytes.
