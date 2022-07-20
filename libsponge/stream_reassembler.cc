@@ -54,8 +54,8 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
     
     // add to _buffer
     string prefix, suffix;
-    auto itBegin = _buffer.lower_bound(Excerpt(beginIdx, beginIdx, string()));
-    auto itEnd = _buffer.lower_bound(Excerpt(endIdx, endIdx, string()));
+    auto itBegin = _buffer.upper_bound(Excerpt(beginIdx, beginIdx, string()));
+    auto itEnd = _buffer.upper_bound(Excerpt(endIdx, endIdx, string()));
 
     if (itBegin != _buffer.begin()) {
         --itBegin;
@@ -83,9 +83,10 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
 
     // move to byte stream
     auto first = _buffer.begin();
-    if ((*first).beginIdx <= _begin) {
+    if ((*first).beginIdx == _begin) {
         _output.write(first->data);
         _begin += first->data.size();
+        _unassembled_bytes -= first->data.size();
         _buffer.erase(first);
     }
 
@@ -102,11 +103,3 @@ void StreamReassembler::check_eof() {
     }
 }
 
-string StreamReassembler::check_capacity(const string& data, size_t endIdx) {
-    size_t remainingCap = remaining_capacity();
-    if (endIdx <= _end || endIdx < _end + remainingCap) {
-        return data;
-    }
-    size_t s = data.size() - (endIdx - _end - remainingCap);
-    return s > 0 ? data.substr(0, s) : string();
-}
