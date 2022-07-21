@@ -19,6 +19,11 @@ class TCPReceiver {
 
     //! The maximum number of bytes we'll store.
     size_t _capacity;
+    WrappingInt32 _ackno{0};
+    WrappingInt32 _isn{0};
+    bool syn {false};
+    
+    void push(const TCPSegment& seg);
 
   public:
     //! \brief Construct a TCP receiver
