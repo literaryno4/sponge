@@ -9,6 +9,7 @@
 #include <functional>
 #include <queue>
 #include <map>
+#include <set>
 
 //! \brief The "sender" part of a TCP implementation.
 
@@ -29,7 +30,12 @@ class TCPSender {
 
     //! retransmission timer for the connection
     unsigned int _initial_retransmission_timeout;
+
     unsigned int _rto;
+
+    bool _fin_sent{false};
+
+    bool _is_detecting{false};
 
     //! outgoing stream of bytes that have not yet been sent
     ByteStream _stream;
@@ -39,9 +45,31 @@ class TCPSender {
 
     size_t _bytes_in_flight{0};
 
+    uint16_t _window_size{1};
+
+    unsigned int _consecutive_retransmissions{0};
+
     void send_data(size_t size);
 
     void send_syn_or_fin(TCPSegment& seg);
+
+    void restart_timer();
+
+    void detect_when_window_zero();
+
+    struct OutstandingSegment {
+        uint64_t last_seqno;
+        TCPSegment seg;
+        uint64_t timer{0};
+        bool is_detecting_seg{false};
+
+        bool operator<(const OutstandingSegment& outseg) const {
+            return last_seqno < outseg.last_seqno;
+        }
+        OutstandingSegment(TCPSegment&& tcp_seg, uint64_t seqno) : last_seqno(seqno), seg(std::move(tcp_seg)) {}
+    };
+
+    std::set<OutstandingSegment> _outstanding_segs2{};
 
   public:
     //! Initialize a TCPSender
