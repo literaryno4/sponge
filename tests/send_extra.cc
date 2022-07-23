@@ -149,35 +149,31 @@ int main() {
             test.execute(ExpectSegment{}.with_payload_size(3).with_data("def").with_seqno(isn + 4));
             test.execute(ExpectNoSegment{});
         }
-        //{
-        //    TCPConfig cfg;
-        //    WrappingInt32 isn(rd());
-        //    cfg.fixed_isn = isn;
+        {
+            TCPConfig cfg;
+            WrappingInt32 isn(rd());
+            cfg.fixed_isn = isn;
 
-        //    const string nicechars = "abcdefghijklmnopqrstuvwxyz";
-        //    string bigstring;
-        //    for (unsigned int i = 0; i < TCPConfig::DEFAULT_CAPACITY; i++) {
-        //        bigstring.push_back(nicechars.at(rd() % nicechars.size()));
-        //    }
+            const string nicechars = "abcdefghijklmnopqrstuvwxyz";
+            string bigstring;
+            for (unsigned int i = 0; i < TCPConfig::DEFAULT_CAPACITY; i++) {
+                bigstring.push_back(nicechars.at(rd() % nicechars.size()));
+            }
 
-        //    const size_t window_size = uniform_int_distribution<uint16_t>{50000, 63000}(rd);
+            const size_t window_size = uniform_int_distribution<uint16_t>{50000, 63000}(rd);
 
-        //    TCPSenderTestHarness test{"fill_window() correctly fills a big window", cfg};
-        //    test.execute(WriteBytes(string(bigstring)));
-        //    test.execute(ExpectSegment{}.with_no_flags().with_syn(true).with_payload_size(0).with_seqno(isn));
-        //    test.execute(AckReceived{WrappingInt32{isn + 1}}.with_win(window_size));
-        //    test.execute(ExpectState{TCPSenderStateSummary::SYN_ACKED});
+            TCPSenderTestHarness test{"fill_window() correctly fills a big window", cfg};
+            test.execute(WriteBytes(string(bigstring)));
+            test.execute(ExpectSegment{}.with_no_flags().with_syn(true).with_payload_size(0).with_seqno(isn));
+            test.execute(AckReceived{WrappingInt32{isn + 1}}.with_win(window_size));
+            test.execute(ExpectState{TCPSenderStateSummary::SYN_ACKED});
 
-        //    for (unsigned int i = 0; i + TCPConfig::MAX_PAYLOAD_SIZE < min(bigstring.size(), window_size);
-        //         i += TCPConfig::MAX_PAYLOAD_SIZE) {
-        //        const size_t expected_size = min(TCPConfig::MAX_PAYLOAD_SIZE, min(bigstring.size(), window_size) - i);
-        //        test.execute(ExpectSegment{}
-        //                         .with_no_flags()
-        //                         .with_payload_size(expected_size)
-        //                         .with_data(bigstring.substr(i, expected_size))
-        //                         .with_seqno(isn + 1 + i));
-        //    }
-        //}
+            for (unsigned int i = 0; i + TCPConfig::MAX_PAYLOAD_SIZE < min(bigstring.size(), window_size);
+                 i += TCPConfig::MAX_PAYLOAD_SIZE) {
+                const size_t expected_size = min(TCPConfig::MAX_PAYLOAD_SIZE, min(bigstring.size(), window_size) - i);
+                test.execute(ExpectSegment{}.with_no_flags().with_payload_size(expected_size).with_data(bigstring.substr(i, expected_size)).with_seqno(isn + 1 + i));
+            }
+        }
 
         {
             TCPConfig cfg;
@@ -298,61 +294,61 @@ int main() {
             test.execute(ExpectState{TCPSenderStateSummary::FIN_ACKED});
         }
 
-        //{
-        //    TCPConfig cfg;
-        //    WrappingInt32 isn(rd());
-        //    const size_t rto = uniform_int_distribution<uint16_t>{30, 10000}(rd);
-        //    cfg.fixed_isn = isn;
-        //    cfg.rt_timeout = rto;
+        {
+            TCPConfig cfg;
+            WrappingInt32 isn(rd());
+            const size_t rto = uniform_int_distribution<uint16_t>{30, 10000}(rd);
+            cfg.fixed_isn = isn;
+            cfg.rt_timeout = rto;
 
-        //    TCPSenderTestHarness test{
-        //        "When filling window, treat a '0' window size as equal to '1' but don't back off RTO", cfg};
-        //    test.execute(ExpectSegment{}.with_no_flags().with_syn(true).with_payload_size(0).with_seqno(isn));
-        //    test.execute(WriteBytes("abc"));
-        //    test.execute(ExpectNoSegment{});
-        //    test.execute(AckReceived{WrappingInt32{isn + 1}}.with_win(0));
-        //    test.execute(ExpectState{TCPSenderStateSummary::SYN_ACKED});
-        //    test.execute(ExpectSegment{}.with_payload_size(1).with_data("a").with_seqno(isn + 1).with_no_flags());
-        //    test.execute(Close{});
-        //    test.execute(ExpectNoSegment{});
+            TCPSenderTestHarness test{
+                "When filling window, treat a '0' window size as equal to '1' but don't back off RTO", cfg};
+            test.execute(ExpectSegment{}.with_no_flags().with_syn(true).with_payload_size(0).with_seqno(isn));
+            test.execute(WriteBytes("abc"));
+            test.execute(ExpectNoSegment{});
+            test.execute(AckReceived{WrappingInt32{isn + 1}}.with_win(0));
+            test.execute(ExpectState{TCPSenderStateSummary::SYN_ACKED});
+            test.execute(ExpectSegment{}.with_payload_size(1).with_data("a").with_seqno(isn + 1).with_no_flags());
+            test.execute(Close{});
+            test.execute(ExpectNoSegment{});
 
-        //    for (unsigned int i = 0; i < 5; i++) {
-        //        test.execute(Tick{rto - 1});
-        //        test.execute(ExpectNoSegment{});
-        //        test.execute(Tick{1});
-        //        test.execute(ExpectSegment{}.with_payload_size(1).with_data("a").with_seqno(isn + 1).with_no_flags());
-        //    }
+            for (unsigned int i = 0; i < 5; i++) {
+                test.execute(Tick{rto - 1});
+                test.execute(ExpectNoSegment{});
+                test.execute(Tick{1});
+                test.execute(ExpectSegment{}.with_payload_size(1).with_data("a").with_seqno(isn + 1).with_no_flags());
+            }
 
-        //    test.execute(AckReceived{isn + 2}.with_win(0));
-        //    test.execute(ExpectSegment{}.with_payload_size(1).with_data("b").with_seqno(isn + 2).with_no_flags());
+            test.execute(AckReceived{isn + 2}.with_win(0));
+            test.execute(ExpectSegment{}.with_payload_size(1).with_data("b").with_seqno(isn + 2).with_no_flags());
 
-        //    for (unsigned int i = 0; i < 5; i++) {
-        //        test.execute(Tick{rto - 1});
-        //        test.execute(ExpectNoSegment{});
-        //        test.execute(Tick{1});
-        //        test.execute(ExpectSegment{}.with_payload_size(1).with_data("b").with_seqno(isn + 2).with_no_flags());
-        //    }
+            for (unsigned int i = 0; i < 5; i++) {
+                test.execute(Tick{rto - 1});
+                test.execute(ExpectNoSegment{});
+                test.execute(Tick{1});
+                test.execute(ExpectSegment{}.with_payload_size(1).with_data("b").with_seqno(isn + 2).with_no_flags());
+            }
 
-        //    test.execute(AckReceived{isn + 3}.with_win(0));
-        //    test.execute(ExpectSegment{}.with_payload_size(1).with_data("c").with_seqno(isn + 3).with_no_flags());
+            test.execute(AckReceived{isn + 3}.with_win(0));
+            test.execute(ExpectSegment{}.with_payload_size(1).with_data("c").with_seqno(isn + 3).with_no_flags());
 
-        //    for (unsigned int i = 0; i < 5; i++) {
-        //        test.execute(Tick{rto - 1});
-        //        test.execute(ExpectNoSegment{});
-        //        test.execute(Tick{1});
-        //        test.execute(ExpectSegment{}.with_payload_size(1).with_data("c").with_seqno(isn + 3).with_no_flags());
-        //    }
+            for (unsigned int i = 0; i < 5; i++) {
+                test.execute(Tick{rto - 1});
+                test.execute(ExpectNoSegment{});
+                test.execute(Tick{1});
+                test.execute(ExpectSegment{}.with_payload_size(1).with_data("c").with_seqno(isn + 3).with_no_flags());
+            }
 
-        //    test.execute(AckReceived{isn + 4}.with_win(0));
-        //    test.execute(ExpectSegment{}.with_payload_size(0).with_data("").with_seqno(isn + 4).with_fin(true));
+            test.execute(AckReceived{isn + 4}.with_win(0));
+            test.execute(ExpectSegment{}.with_payload_size(0).with_data("").with_seqno(isn + 4).with_fin(true));
 
-        //    for (unsigned int i = 0; i < 5; i++) {
-        //        test.execute(Tick{rto - 1});
-        //        test.execute(ExpectNoSegment{});
-        //        test.execute(Tick{1});
-        //        test.execute(ExpectSegment{}.with_payload_size(0).with_data("").with_seqno(isn + 4).with_fin(true));
-        //    }
-        //}
+            for (unsigned int i = 0; i < 5; i++) {
+                test.execute(Tick{rto - 1});
+                test.execute(ExpectNoSegment{});
+                test.execute(Tick{1});
+                test.execute(ExpectSegment{}.with_payload_size(0).with_data("").with_seqno(isn + 4).with_fin(true));
+            }
+        }
 
         {
             TCPConfig cfg;

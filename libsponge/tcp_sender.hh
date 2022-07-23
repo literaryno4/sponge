@@ -26,7 +26,16 @@ class TCPSender {
     std::queue<TCPSegment> _segments_out{};
 
     // {last_seqno, {seg, time}}
-    std::map<uint64_t, std::pair<TCPSegment, uint64_t>> _outstanding_segs{};
+    struct OutstandingSegment {
+        TCPSegment seg;
+        uint64_t timer{0};
+        bool is_detecting{false};
+        // explicit OutstandingSegment(TCPSegment&& tcpseg) : seg(std::move(tcpseg)) {}
+        explicit OutstandingSegment(const TCPSegment& tcpseg) : seg(tcpseg) {}
+        explicit OutstandingSegment(const TCPSegment& tcpseg, bool detecting) : seg(tcpseg), is_detecting(detecting) {}
+        OutstandingSegment() : seg(TCPSegment()) {}
+    };
+    std::map<uint64_t, OutstandingSegment> _outstanding_segs{};
 
     //! retransmission timer for the connection
     unsigned int _initial_retransmission_timeout;
@@ -53,23 +62,11 @@ class TCPSender {
 
     void send_syn_or_fin(TCPSegment& seg);
 
+    void send_tcp_segment(const TCPSegment& seg, bool detecting);
+
     void restart_timer();
 
     void detect_when_window_zero();
-
-    struct OutstandingSegment {
-        uint64_t last_seqno;
-        TCPSegment seg;
-        uint64_t timer{0};
-        bool is_detecting_seg{false};
-
-        bool operator<(const OutstandingSegment& outseg) const {
-            return last_seqno < outseg.last_seqno;
-        }
-        OutstandingSegment(TCPSegment&& tcp_seg, uint64_t seqno) : last_seqno(seqno), seg(std::move(tcp_seg)) {}
-    };
-
-    std::set<OutstandingSegment> _outstanding_segs2{};
 
   public:
     //! Initialize a TCPSender

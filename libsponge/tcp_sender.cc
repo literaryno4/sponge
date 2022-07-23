@@ -30,7 +30,9 @@ void TCPSender::fill_window() {
         send_syn_or_fin(seg);
     }
 
-    send_data(_stream.buffer_size());
+    while (_stream.buffer_size() && _window_size > 0) {
+        send_data(_stream.buffer_size());
+    }
 
     if (_stream.eof() && _window_size > 0 && !_fin_sent) {
         TCPSegment seg;
@@ -57,7 +59,7 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     auto itEnd = _outstanding_segs.lower_bound(ackno_abs);
     bool ackedNew = false;
     for (auto it = _outstanding_segs.begin(); it != itEnd;) {
-        _bytes_in_flight -= it->second.first.length_in_sequence_space();
+        _bytes_in_flight -= it->second.seg.length_in_sequence_space();
         it = _outstanding_segs.erase(it);
         ackedNew = true;
     }
@@ -77,12 +79,14 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
 void TCPSender::tick(const size_t ms_since_last_tick) {
     bool restartTimer = false;
     for (auto& outstanding_seg : _outstanding_segs) {
-        outstanding_seg.second.second += ms_since_last_tick;
-        if (outstanding_seg.second.second >= _rto) {
-            _segments_out.push(outstanding_seg.second.first);
+        outstanding_seg.second.timer += ms_since_last_tick;
+        if (outstanding_seg.second.timer >= _rto) {
+            _segments_out.push(outstanding_seg.second.seg);
             ++_consecutive_retransmissions;
-            _rto <<= 1;
-            outstanding_seg.second.second = 0;
+            if (!outstanding_seg.second.is_detecting) {
+                _rto <<= 1;
+            }
+            outstanding_seg.second.timer = 0;
             restartTimer = true;
         }
     }
@@ -119,7 +123,7 @@ void TCPSender::send_data(size_t size) {
     }
     _segments_out.push(seg);
     _next_seqno += seg.length_in_sequence_space();
-    _outstanding_segs[_next_seqno - 1] = {seg, 0};
+    _outstanding_segs[_next_seqno - 1] = OutstandingSegment(seg);
     _bytes_in_flight += seg.length_in_sequence_space();
     _window_size -= seg.length_in_sequence_space();
 }
@@ -128,25 +132,35 @@ void TCPSender::send_syn_or_fin(TCPSegment& seg) {
     seg.header().seqno = wrap(_next_seqno, _isn);
     _segments_out.push(seg);
     ++_next_seqno;
-    _outstanding_segs[_next_seqno - 1] = {seg, 0};
+    _outstanding_segs[_next_seqno - 1] = OutstandingSegment(seg);
     _bytes_in_flight += seg.length_in_sequence_space();
     --_window_size;
 }
 
 void TCPSender::restart_timer() {
     for (auto& outstanding_seg: _outstanding_segs) {
-        outstanding_seg.second.second = 0;
+        outstanding_seg.second.timer = 0;
     }
 }
 
 void TCPSender::detect_when_window_zero() {
     TCPSegment seg;
+    seg.header().seqno = wrap(_next_seqno, _isn);
+    seg.header().fin = _stream.eof();
+    _fin_sent = _stream.eof();
     Buffer buffer(_stream.buffer_empty() ? string() : _stream.read(1));
     seg.payload() = buffer;
-    seg.header().seqno = wrap(_next_seqno, _isn);
     _segments_out.push(seg);
     _next_seqno += seg.length_in_sequence_space();
-    _outstanding_segs[_next_seqno - 1] = {seg, 0};
+    _outstanding_segs[_next_seqno - 1] = OutstandingSegment(seg, true);
+    _bytes_in_flight += seg.length_in_sequence_space();
+    _window_size -= seg.length_in_sequence_space();
+}
+
+void TCPSender::send_tcp_segment(const TCPSegment& seg, bool detecting) {
+    _segments_out.push(seg);
+    _next_seqno += seg.length_in_sequence_space();
+    _outstanding_segs[_next_seqno - 1] = OutstandingSegment(seg, detecting);
     _bytes_in_flight += seg.length_in_sequence_space();
     _window_size -= seg.length_in_sequence_space();
 }
