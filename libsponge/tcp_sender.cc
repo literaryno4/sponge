@@ -5,11 +5,6 @@
 #include <random>
 #include <cassert>
 
-// Dummy implementation of a TCP sender
-
-// For Lab 3, please replace with a real implementation that passes the
-// automated checks run by `make check_lab3`.
-
 using namespace std;
 
 //! \param[in] capacity the capacity of the outgoing byte stream
@@ -25,19 +20,15 @@ uint64_t TCPSender::bytes_in_flight() const { return _bytes_in_flight; }
 
 void TCPSender::fill_window() {
     if (_next_seqno == 0) {
-        TCPSegment seg;
-        seg.header().syn = true;
-        send_syn_or_fin(seg);
+        send_syn_or_fin(true, false);
     }
 
     while (_stream.buffer_size() && _window_size > 0) {
-        send_data(_stream.buffer_size());
+        send_data();
     }
 
     if (_stream.eof() && _window_size > 0 && !_fin_sent) {
-        TCPSegment seg;
-        seg.header().fin = true;
-        send_syn_or_fin(seg);
+        send_syn_or_fin(false, true);
         _fin_sent = true;
     }
 }
@@ -48,14 +39,16 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     if (window_size == 0) {
         detect_when_window_zero();
     }
-    // del relative _outstanding_segs
+
     uint64_t ackno_abs = unwrap(ackno, _isn, _stream.bytes_read());
     if (ackno_abs > _next_seqno) {
         return;
     }
 
+    // calculate sending window size
     _window_size = window_size > (_next_seqno - ackno_abs) ? window_size - (_next_seqno - ackno_abs) : 0;
 
+    // del relative _outstanding_segs
     auto itEnd = _outstanding_segs.lower_bound(ackno_abs);
     bool ackedNew = false;
     for (auto it = _outstanding_segs.begin(); it != itEnd;) {
@@ -72,11 +65,12 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     }
 
     // send if possible
-    send_data(window_size);
+    send_data();
 }
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
 void TCPSender::tick(const size_t ms_since_last_tick) {
+    // check retransmition timeout
     bool restartTimer = false;
     for (auto& outstanding_seg : _outstanding_segs) {
         outstanding_seg.second.timer += ms_since_last_tick;
@@ -94,7 +88,7 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
         restart_timer();
     }
     // send if possible
-    send_data(_window_size);
+    send_data();
 }
 
 unsigned int TCPSender::consecutive_retransmissions() const { return _consecutive_retransmissions; }
@@ -105,10 +99,9 @@ void TCPSender::send_empty_segment() {
     _segments_out.push(seg);
 }
 
-void TCPSender::send_data(size_t size) {
-    size = min(size, _stream.buffer_size());
-    size = min(size, TCPConfig::MAX_PAYLOAD_SIZE);
-    size = min(size, static_cast<size_t>(_window_size));
+void TCPSender::send_data() {
+    size_t size = min(static_cast<size_t>(_window_size), min(TCPConfig::MAX_PAYLOAD_SIZE,_stream.buffer_size()));
+
     if (size == 0) {
         return;
     }
@@ -121,20 +114,17 @@ void TCPSender::send_data(size_t size) {
         seg.header().fin = _stream.eof();
         _fin_sent = _stream.eof();
     }
-    _segments_out.push(seg);
-    _next_seqno += seg.length_in_sequence_space();
-    _outstanding_segs[_next_seqno - 1] = OutstandingSegment(seg);
-    _bytes_in_flight += seg.length_in_sequence_space();
-    _window_size -= seg.length_in_sequence_space();
+
+    send_tcp_segment(seg, false);
 }
 
-void TCPSender::send_syn_or_fin(TCPSegment& seg) {
+void TCPSender::send_syn_or_fin(bool syn, bool fin) {
+    TCPSegment seg;
+    seg.header().syn = syn;
+    seg.header().fin = fin;
     seg.header().seqno = wrap(_next_seqno, _isn);
-    _segments_out.push(seg);
-    ++_next_seqno;
-    _outstanding_segs[_next_seqno - 1] = OutstandingSegment(seg);
-    _bytes_in_flight += seg.length_in_sequence_space();
-    --_window_size;
+
+    send_tcp_segment(seg, false);
 }
 
 void TCPSender::restart_timer() {
@@ -148,13 +138,11 @@ void TCPSender::detect_when_window_zero() {
     seg.header().seqno = wrap(_next_seqno, _isn);
     seg.header().fin = _stream.eof();
     _fin_sent = _stream.eof();
+
     Buffer buffer(_stream.buffer_empty() ? string() : _stream.read(1));
     seg.payload() = buffer;
-    _segments_out.push(seg);
-    _next_seqno += seg.length_in_sequence_space();
-    _outstanding_segs[_next_seqno - 1] = OutstandingSegment(seg, true);
-    _bytes_in_flight += seg.length_in_sequence_space();
-    _window_size -= seg.length_in_sequence_space();
+
+    send_tcp_segment(seg, true);
 }
 
 void TCPSender::send_tcp_segment(const TCPSegment& seg, bool detecting) {

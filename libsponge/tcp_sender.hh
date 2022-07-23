@@ -40,11 +40,11 @@ class TCPSender {
     //! retransmission timer for the connection
     unsigned int _initial_retransmission_timeout;
 
+    //! retransmission timeout
     unsigned int _rto;
 
+    //! flag for fin sent
     bool _fin_sent{false};
-
-    bool _is_detecting{false};
 
     //! outgoing stream of bytes that have not yet been sent
     ByteStream _stream;
@@ -52,15 +52,18 @@ class TCPSender {
     //! the (absolute) sequence number for the next byte to be sent
     uint64_t _next_seqno{0};
 
+    //! bytes not acked
     size_t _bytes_in_flight{0};
 
+    //! window_size begin with _next_seqno for sending new data
     uint16_t _window_size{1};
 
     unsigned int _consecutive_retransmissions{0};
 
-    void send_data(size_t size);
+    //! send tcp segment with payload
+    void send_data();
 
-    void send_syn_or_fin(TCPSegment& seg);
+    void send_syn_or_fin(bool syn, bool fin);
 
     void send_tcp_segment(const TCPSegment& seg, bool detecting);
 
