@@ -23,8 +23,9 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
 
     // for payload
     if (syn) {
-        _reassembler.push_substring(
-            seg.payload().copy(), unwrap(seg.header().seqno, _isn, stream_out().bytes_written()) - 1, seg.header().fin);
+        string data = seg.payload().copy();
+        size_t index = unwrap(seg.header().seqno, _isn, stream_out().bytes_written()) - 1;
+        _reassembler.push_substring(data, index, seg.header().fin);
         _ackno = _isn + stream_out().bytes_written() + 1;
         if (stream_out().input_ended() && _reassembler.empty()) {
             _ackno = _ackno + 1;

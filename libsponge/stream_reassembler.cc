@@ -30,6 +30,9 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
 
     // calcu data that can be add to
     size_t beginIdx = index, endIdx = index + data.size();
+    if (beginIdx > endIdx) {
+        return;
+    }
     string dataToAdd = data;
     size_t leftDisOrder = _capacity -_output.buffer_size();
     if (leftDisOrder + _begin < endIdx) {
