@@ -33,7 +33,6 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
     }
 }
 
-
 optional<WrappingInt32> TCPReceiver::ackno() const {
     if (_ackno != WrappingInt32(0)) {
         return _ackno;
