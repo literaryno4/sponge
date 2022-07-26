@@ -16,9 +16,23 @@ void get_URL(const string &host, const string &path) {
     // Then you'll need to print out everything the server sends back,
     // (not just one call to read() -- everything) until you reach
     // the "eof" (end of file).
+    string request;
+    request += "GET " + path + " HTTP/1.1\r\n";
+    request += "Host: " + host + "\r\n";
+    request += "Connection: close\r\n";
+    request += "\r\n";
+    string recvBuffer;
+    Address addr(host, "http");
+    TCPSocket ts;
+    ts.connect(addr);
+    ts.write(request);
+    string recvMsg;
+    while (!ts.eof()) {
+        ts.read(recvBuffer);
+        recvMsg += recvBuffer;
+    }
+    cout << recvMsg;
 
-    cerr << "Function called: get_URL(" << host << ", " << path << ").\n";
-    cerr << "Warning: get_URL() has not been implemented yet.\n";
 }
 
 int main(int argc, char *argv[]) {
