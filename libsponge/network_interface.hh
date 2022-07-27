@@ -7,6 +7,7 @@
 
 #include <optional>
 #include <queue>
+#include <map>
 
 //! \brief A "network interface" that connects IP (the internet layer, or network layer)
 //! with Ethernet (the network access layer, or link layer).
@@ -17,7 +18,6 @@
 //! as part of a router: a router generally has many network
 //! interfaces, and the router's job is to route Internet datagrams
 //! between the different interfaces.
-
 //! The network interface translates datagrams (coming from the
 //! "customer," e.g. a TCP/IP stack or router) into Ethernet
 //! frames. To fill in the Ethernet destination address, it looks up
@@ -40,6 +40,36 @@ class NetworkInterface {
     //! outbound queue of Ethernet frames that the NetworkInterface wants sent
     std::queue<EthernetFrame> _frames_out{};
 
+    //std::unordered_map<Address, EthernetFrame> _arp_map;
+
+    static constexpr size_t MAX_RETX_WAITING_TIME = 5000;
+
+    static constexpr size_t MAX_CACHE_TIME = 30000;
+
+    struct EthernetAddressEntry {
+        size_t caching_time;
+        EthernetAddress MAC_address;
+    };
+
+    std::map<uint32_t, EthernetAddressEntry> _cache{};
+
+    struct WaitingList {
+        size_t time_since_last_ARP_request_send = 0;
+        std::queue<InternetDatagram> waiting_datagram{};
+    };
+
+    std::map<uint32_t, WaitingList> _queue_map{};
+
+    std::optional<EthernetAddress> get_EthernetAddress(const uint32_t ip_addr);
+    std::optional<WaitingList> get_WaitingList(const uint32_t ip_addr);
+    void send_helper(const EthernetAddress MAC_addr, const InternetDatagram& dgram);
+    void queue_helper(const uint32_t ip_addr, const InternetDatagram& dgram);
+    void send_ARP_request(const uint32_t ip_addr);
+    void send_ARP_reply(const uint32_t ip_addr, const EthernetAddress& MAC_addr);
+    bool valid_frame(const EthernetFrame& frame);
+    void cache_mapping(uint32_t ip_addr, EthernetAddress MAC_addr);
+    void clear_waitinglist(uint32_t ip_addr, EthernetAddress MAC_addr);
+
   public:
     //! \brief Construct a network interface with given Ethernet (network-access-layer) and IP (internet-layer) addresses
     NetworkInterface(const EthernetAddress &ethernet_address, const Address &ip_address);
@@ -58,7 +88,7 @@ class NetworkInterface {
     //! If type is IPv4, returns the datagram.
     //! If type is ARP request, learn a mapping from the "sender" fields, and send an ARP reply.
     //! If type is ARP reply, learn a mapping from the "sender" fields.
-    std::optional<InternetDatagram> recv_frame(const EthernetFrame &frame);
+    std::optional<InternetDatagram> recv_frame(const EthernetFrame &frame); 
 
     //! \brief Called periodically when time elapses
     void tick(const size_t ms_since_last_tick);
